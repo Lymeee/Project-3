@@ -3,41 +3,43 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <queue>
 #include "AdjacencyList.h"
 
-using namespace std;
-
-vector<string> AdjacencyList::BFS(string& x) {
-    vector<string> output;
-    unordered_set<string> visit;
-    queue<string> q;
+std::vector<std::string> AdjacencyList::BFS(std::string& x) {
+    std::vector<std::string> output;
+    std::unordered_set<std::string> visit;
+    std::queue<std::string> q;
 
     visit.insert(x);
     q.push(x);
 
     while (!q.empty()) {
-        string cur = q.front();
+        std::string cur = q.front();
         q.pop();
         output.push_back(cur);
 
-        //Add more here
+        // Add more here 
     }
+
+    return output;
 }
 
-vector<string> AdjacencyList::DFS(string& x) {
-    vector<string> output;
-    unordered_set<string> visit;
-    queue<string> q;
+std::vector<std::string> AdjacencyList::DFS(std::string& x) {
+    std::vector<std::string> output;
+    std::unordered_set<std::string> visit;
+    std::queue<std::string> q;
 
     visit.insert(x);
     q.push(x);
 
-
     while (!q.empty()) {
-        string cur = q.front();
+        std::string cur = q.front();
         q.pop();
         output.push_back(cur);
 
-        //Add more here
+        // Add more here
     }
+
+    return output;
 }
