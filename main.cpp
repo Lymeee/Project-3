@@ -4,12 +4,37 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <fstream>
+
+using namespace std;
+
+struct Steam_Properties {
+    string name;
+    float score;
+    int recommended;
+};
 
 // Data loading & filtering
 // - loadReviews(filePath): read reviews into vector
 // - filterByYear(reviews, year)
 // - filterByGenre(reviews, genre)
 // - filterByScore(reviews, minScore, maxScore)
+
+vector<Steam_Properties> loadReviews(string fileName) {
+    ifstream file(fileName);
+    vector<Steam_Properties> result;
+    string name;
+    float score;
+    int recommended;
+    
+    while (file >> name >> score >> recommended) {
+        result.push_back({name, score, recommended});
+    }
+
+    //Might need to change based on properties and how it is sorted
+
+    return result;
+}
 
 // Algorithms & data representation
 // - Represent each game as a node in a graph
