@@ -8,6 +8,7 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <chrono> // used for timing the efficency of searches
 
 // Struct for holding relevant Steam review data
 struct Steam_Properties {
@@ -200,10 +201,42 @@ int main() {
             }
         }
 
-        // 3) Run BFS or DFS on graph (not implemented)
+        // 3) Run BFS or DFS on graph (not fully implemented)
         else if (choice == 3) {
             if (!loaded) std::cout << "Please load data first.\n";
-            else std::cout << "Search (BFS/DFS) not implemented yet.\n";
+            else {
+                AdjacencyList new_graph;
+                std::vector<std::string> output
+
+                //Not fully implemented yet, just basic structure currently
+                //Need to create the graph we are traversing through before using searches below
+
+                std::cout << "Enter search type (BFS or DFS): ";
+                std::string search_type;
+                std::cin >> search_type;
+
+                auto start = std::chrono::high_resolution_clock::now();
+
+                if (search_type == "BFS" || search_type == "bfs" || search_type == "Bfs") {
+                    //Wont work without graph made
+                    //output = new_graph.BFS(start_game);
+                }
+                else if(search_type == "DFS" || search_type == "dfs" || search_type == "Dfs") {
+                    //Wont work without graph made
+                    //output = new_graph.DFS(start_game);
+                }
+                else {
+                    std::cout << "Invalid search name or type";
+                    continue;
+                }
+
+                auto end = std::chrono::high_resolution_clock::now();
+                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+                std::cout << "Search of type " << search_type << " took " << duration.count() << " microseconds\n";
+                
+                std::cout << "Search (BFS/DFS) not fully implemented yet.\n";
+            }
         }
 
         // 4) Display statistics of current filtered data
