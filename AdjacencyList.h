@@ -6,19 +6,15 @@
 #include <string>
 #include <unordered_map>
 
-using namespace std;
-
 class AdjacencyList {
-    private:
-    unordered_map<string, vector<string>> adj_List;
+private:
+    std::unordered_map<std::string, std::vector<std::string>> adj_List;
 
-    public:
-    void makeEdge(string x, string y);
+public:
+    void makeEdge(std::string x, std::string y);
 
-    vector<string> BFS(string& x);
-    vector<string> DFS(string& x);
+    std::vector<std::string> BFS(std::string& x);
+    std::vector<std::string> DFS(std::string& x);
 };
 
-
-
-#endif //ADJACENCYLIST_H
+#endif // ADJACENCYLIST_H
