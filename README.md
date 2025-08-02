@@ -11,8 +11,8 @@ A simple console app that lets you:
 
 ## Data  
 Kaggle Steam Reviews:  
-https://www.kaggle.com/datasets/andrewmvd/steam-reviews
-Download here: https://github.com/Lymeee/Project-3/releases/tag/release
+https://www.kaggle.com/datasets/andrewmvd/steam-reviews  
+Download here: https://github.com/Lymeee/Project-3/releases/tag/release  
 
 ## Tools  
 - C++17  
