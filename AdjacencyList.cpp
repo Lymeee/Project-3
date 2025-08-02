@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <queue>
+#include <stack> 
 #include "AdjacencyList.h"
 
 std::vector<std::string> AdjacencyList::BFS(std::string& x) {

@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <stack>
 
 class AdjacencyList {
 private:
