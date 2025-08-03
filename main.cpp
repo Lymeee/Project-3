@@ -1,394 +1,332 @@
-// main.cpp
-// Steam Review Comfort Visualizer
-
 #include <iostream>
-#include <vector>
-#include <map>   // used for title to id match
-#include <regex> // only for input check
-#include <string>
 #include <fstream>
 #include <sstream>
-#include <chrono> // used for timing the efficency of searches
-#include <unordered_set>
+#include <vector>
+#include <map>
+#include <string>
+#include <unordered_map>
+#include <algorithm>
+#include <chrono>
 
 #include "AdjacencyList.h"
-// Struct for holding relevant Steam review data
-struct Steam_Properties
-{
+
+// Dear ImGui
+#include "imgui.h"
+#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_opengl3.h"
+#include <GLFW/glfw3.h>
+
+// --- Data Model + CSV Loader + Graph Builder ---
+struct Steam_Properties {
     int appID;
     std::string name;
     std::string reviewText;
-    int score; // review_score (1 = recommended, 0 = not)
-    int votes; // review_votes (helpful votes)
+    int score;
+    int votes;
 };
 
-// Data loading: parses CSV and returns vector of Steam_Properties
-std::vector<Steam_Properties> loadReviews(const std::string &fileName, std::map<std::string, int> &uniqueTitles)
+std::vector<Steam_Properties> loadReviews(
+    const std::string& fileName,
+    std::map<std::string,int>& uniqueTitles)
 {
+    std::vector<Steam_Properties> out;
     std::ifstream file(fileName);
-    std::vector<Steam_Properties> result;
-
-    if (!file.is_open())
-    {
-        std::cerr << "Failed to open file.\n";
-        return result;
+    if (!file.is_open()) {
+        std::cerr << "Failed to open " << fileName << "\n";
+        return out;
     }
 
     std::string line;
-    std::getline(file, line); // Skip header
-
-    while (std::getline(file, line))
-    {
+    std::getline(file, line); // skip header
+    while (std::getline(file, line)) {
         std::stringstream ss(line);
-        Steam_Properties review;
+        Steam_Properties r;
         std::string field;
 
-        try
-        {
-            // 1. app_id
-            if (!std::getline(ss, field, ','))
-                continue;
-            review.appID = std::stoi(field);
+        if (!std::getline(ss, field, ',')) continue;
+        try { r.appID = std::stoi(field); } catch(...) { continue; }
 
-            // 2. app_name
-            if (!std::getline(ss, field, ','))
-                continue;
-            review.name = field;
+        if (!std::getline(ss, field, ',')) continue;
+        r.name = field;
+        if (r.name.empty()) continue;
 
-            // Should repeat the comma code here, there are some games with commas in them. Other error I saw was invalid number, still trying to figure that one out
-
-            // 3. review_text (quoted and may include commas)
-            if (!std::getline(ss, field, ','))
-                continue;
-            if (!field.empty() && field.front() == '"')
-            {
-                std::string part;
-                while (field.back() != '"' && std::getline(ss, part, ','))
-                {
-                    field += "," + part;
-                }
-                if (field.front() == '"' && field.back() == '"')
-                {
-                    field = field.substr(1, field.size() - 2);
-                }
+        if (!std::getline(ss, field, ',')) continue;
+        if (!field.empty() && field.front()=='"') {
+            std::string part;
+            while (field.back()!='"' && std::getline(ss, part, ',')) {
+                field += "," + part;
             }
-            review.reviewText = field;
-
-            // 4. review_score
-            if (!std::getline(ss, field, ','))
-                continue;
-            review.score = std::stoi(field);
-
-            // 5. review_votes
-            if (!std::getline(ss, field, ','))
-                continue;
-            review.votes = std::stoi(field);
-
-            result.push_back(review);
-
-            // adds title to map with value as appID | added as a pass-by reference to save on re-iterating through whole vector lists again to find unique titles
-            if (uniqueTitles.find(review.name) == uniqueTitles.end())
-            {
-                uniqueTitles.insert({review.name, review.appID});
-            }
+            if (field.front()=='"' && field.back()=='"')
+                field = field.substr(1, field.size()-2);
         }
-        catch (const std::invalid_argument &e)
-        {
-            std::cerr << "Invalid number in row: " << line << "\n";
-            continue;
-        }
-        catch (const std::out_of_range &e)
-        {
-            std::cerr << "Out of range number in row: " << line << "\n";
-            continue;
-        }
+        r.reviewText = field;
+
+        if (!std::getline(ss, field, ',')) continue;
+        try { r.score = std::stoi(field); } catch(...) { continue; }
+
+        if (!std::getline(ss, field, ',')) continue;
+        try { r.votes = std::stoi(field); } catch(...) { continue; }
+
+        out.push_back(r);
+        uniqueTitles.emplace(r.name, r.appID);
     }
-
-    return result;
+    return out;
 }
 
-// Reverse Map: ID-Title
-std::map<int, std::string> reverseTitleMap(const std::map<std::string, int> uniqueTitles)
+void buildGraphFromReviews(
+    const std::vector<Steam_Properties>& reviews,
+    AdjacencyList& graph)
 {
-    std::map<int, std::string> uniqueIDs;
-    for (auto g : uniqueTitles)
-    {
-        uniqueIDs.insert({g.second, g.first});
-    }
-    return uniqueIDs;
-}
-
-// Filter reviews by review_score (recommended or not)
-std::vector<Steam_Properties> filterByScore(const std::vector<Steam_Properties> &reviews, int desiredScore)
-{
-    std::vector<Steam_Properties> result;
-    for (const auto &r : reviews)
-    {
-        if (r.score == desiredScore)
-            result.push_back(r);
-    }
-    return result;
-}
-
-// Filter reviews by minimum number of helpful votes
-std::vector<Steam_Properties> filterByVotes(const std::vector<Steam_Properties> &reviews, int minVotes)
-{
-    std::vector<Steam_Properties> result;
-    for (const auto &r : reviews)
-    {
-        if (r.votes >= minVotes)
-            result.push_back(r);
-    }
-    return result;
-}
-
-// Filters reviews by game title
-std::vector<Steam_Properties> filterByGame(const std::vector<Steam_Properties> &reviews, int desiredGameID)
-{
-    std::vector<Steam_Properties> result;
-    for (const auto &r : reviews)
-    {
-        if (r.appID == desiredGameID)
-            result.push_back(r);
-    }
-    return result;
-}
-
-std::string cleanReviewText(std::string s)
-{
-    s.erase(0, s.find_first_not_of(" \t\r\n"));
-    s.erase(s.find_last_not_of(" \t\r\n") + 1);
-    return s;
-}
-
-void buildGraphFromReviews(const std::vector<Steam_Properties>& reviews,
-                           AdjacencyList& graph) {
-    // 1) bucket by appID
-    std::unordered_map<int, std::vector<std::string>> byGame;
-    for (auto& r : reviews) {
+    // Group reviews by game ID
+    std::unordered_map<int,std::vector<std::string>> byGame;
+    for (auto& r : reviews)
         byGame[r.appID].push_back(r.reviewText);
-    }
 
-    // 2) fully connect each bucket
-    for (auto& [appID, texts] : byGame) {
-        for (size_t i = 0; i < texts.size(); ++i) {
-            for (size_t j = i + 1; j < texts.size(); ++j) {
+    // Connect every pair of reviews for each game
+    for (auto& kv : byGame) {
+        auto& texts = kv.second;
+        for (size_t i = 0; i < texts.size(); ++i)
+            for (size_t j = i+1; j < texts.size(); ++j)
                 graph.makeEdge(texts[i], texts[j]);
-            }
-        }
     }
 }
 
+int main() {
+    // Initialize GLFW and create window
+    if (!glfwInit()) return 1;
+    const char* glsl_version = "#version 130";
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    GLFWwindow* window = glfwCreateWindow(900,700,"Steam Review Visualizer",NULL,NULL);
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(1);
 
-int main()
-{
-    std::vector<Steam_Properties> reviews;
-    std::vector<Steam_Properties> filtered;
-    std::map<std::string, int> uniqueTitles; // map organized with key as title for alphabetical reference
-    std::map<int, std::string> uniqueIDs;    // id:title map for processing other choices
+    // Initialize ImGui context and backends
+    ImGui::CreateContext();
+    ImGui_ImplGlfw_InitForOpenGL(window,true);
+    ImGui_ImplOpenGL3_Init(glsl_version);
 
-    bool loaded = false;
-    std::string gameTitle = "N/A"; // filter check
-
-    // Menu loop
-    while (true)
+    // Show loading screen 
     {
-        std::cout << "\nSteam Review Comfort Visualizer\n"
-                  << "1) Load data\n"
-                  << "2) Apply filters\n"
-                  << "3) Run BFS or DFS\n"
-                  << "4) View stats\n"
-                  << "5) Exit\n"
-                  << "Enter choice: ";
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+        ImGui::Begin("Loading");
+        ImGui::Text("Loading reviews, please wait...");
+        ImGui::End();
+        ImGui::Render();
+        int w,h; glfwGetFramebufferSize(window,&w,&h);
+        glViewport(0,0,w,h);
+        glClearColor(0,0,0,1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        glfwSwapBuffers(window);
+    }
 
-        int choice;
-        std::cin >> choice;
+    // Load reviews from CSV and collect unique game titles
+    std::map<std::string,int> uniqueTitles;
+    auto allReviews = loadReviews("steam_sample.csv", uniqueTitles);
 
-        // 1) Load CSV data
-        if (choice == 1)
-        {
-            if (!loaded)
-            {                                                            // wrapped this since I don't think we will need to keep reloading the same set
-                reviews = loadReviews("steam_sample.csv", uniqueTitles); // Testing for now
-                if (!reviews.empty())
-                {
-                    filtered = reviews;
-                    uniqueIDs = reverseTitleMap(uniqueTitles);
-                    loaded = true;
-                    std::cout << "Loaded " << reviews.size() << " reviews.\n";
+    // Prepare game names for filter dropdown
+    std::vector<std::string> gameNames{"All Games"};
+    for (auto& kv : uniqueTitles)
+        if (!kv.first.empty())
+            gameNames.push_back(kv.first);
+
+    // Prepare filtered reviews and graph
+    std::vector<Steam_Properties> filtered = allReviews;
+    AdjacencyList graph;
+    buildGraphFromReviews(filtered, graph);
+
+    // UI state variables
+    static int   gameFilterIdx   = 0;
+    static int   scoreFilterIdx  = 0;
+    static int   minVotesFilter  = 0;
+    static char  keyword[128]    = "";
+    static int   searchType      = 0;
+    std::vector<std::string> resultNodes;
+    long long elapsed_us = 0;
+    static bool searched = false;
+
+    // Main loop
+    while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        ImGui::Begin("Steam Review Visualizer");
+
+        // Tab bar for UI sections
+        if (ImGui::BeginTabBar("MainTabBar")) {
+            // Filters tab
+            if (ImGui::BeginTabItem("Filters")) {
+                // Game filter dropdown
+                if (ImGui::BeginCombo("Game Filter", gameNames[gameFilterIdx].c_str())) {
+                    for (int i=0; i<(int)gameNames.size(); ++i) {
+                        bool sel = (i==gameFilterIdx);
+                        if (ImGui::Selectable(gameNames[i].c_str(), sel))
+                            gameFilterIdx = i;
+                        if (sel) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
                 }
-                else
-                {
-                    std::cout << "Failed to load data.\n";
+                // Minimum votes slider
+                ImGui::SliderInt("Min Votes", &minVotesFilter, 0, 100);
+                // Recommendation filter
+                ImGui::Combo("Recommendation", &scoreFilterIdx,
+                             "All\0Recommended\0Not Recommended\0");
+                // Apply filters button
+                if (ImGui::Button("Apply Filters")) {
+                    filtered = allReviews;
+                    // Filter by game
+                    if (gameFilterIdx>0) {
+                        int id = uniqueTitles[gameNames[gameFilterIdx]];
+                        filtered.erase(std::remove_if(
+                            filtered.begin(), filtered.end(),
+                            [&](auto& r){ return r.appID!=id; }),
+                        filtered.end());
+                    }
+                    // Filter by recommendation
+                    if (scoreFilterIdx==1) {
+                        filtered.erase(std::remove_if(
+                            filtered.begin(), filtered.end(),
+                            [](auto& r){ return r.score!=1; }),
+                        filtered.end());
+                    } else if (scoreFilterIdx==2) {
+                        filtered.erase(std::remove_if(
+                            filtered.begin(), filtered.end(),
+                            [](auto& r){ return r.score!=0; }),
+                        filtered.end());
+                    }
+                    // Filter by minimum votes
+                    if (minVotesFilter>0) {
+                        filtered.erase(std::remove_if(
+                            filtered.begin(), filtered.end(),
+                            [&](auto& r){ return r.votes<minVotesFilter; }),
+                        filtered.end());
+                    }
+                    // Rebuild graph and clear results
+                    graph = AdjacencyList();
+                    buildGraphFromReviews(filtered, graph);
+                    resultNodes.clear();
                 }
-            }
-        }
-
-        // 2) Apply filters to review data
-        else if (choice == 2)
-        {
-            gameTitle = "N/A"; // resets game title/status
-            if (!loaded)
-            {
-                std::cout << "Please load data first.\n";
-            }
-            else
-            {
-                int desiredScore, minVotes;
-                std::string desiredGameID;
-
-                // added to give a reference list for games and their id #
-                std::cout << "App ID for Games\n"
-                          << "======================\n";
-                for (auto r : uniqueTitles)
-                {
-                    std::cout << r.first << ": " << r.second << std::endl;
-                }
-                std::cout << "======================\n";
-
-                std::cout << "Game ID (ID number or 'q' to bypass): "; // currently, any char/string will work4
-                std::cin >> desiredGameID;
-                std::cout << "Filter by score (0 or 1): ";
-                std::cin >> desiredScore;
-                std::cout << "Minimum helpful votes: ";
-                std::cin >> minVotes;
-
-                // regex check for empty string input on filterByGame..., can also just use try/catch to avoid error
-                if (std::regex_match(desiredGameID, std::regex("^[0-9]+$")))
-                {
-                    int gameID = std::stoi(desiredGameID);
-                    gameTitle = uniqueIDs[gameID];
-                    filtered = filterByGame(filtered, gameID);
-                }
-
-                filtered = filterByScore(filtered, desiredScore);
-                filtered = filterByVotes(filtered, minVotes);
-
-                std::cout << "Filtered to " << filtered.size() << " reviews.\n";
-            }
-        }
-
-        // 3) Run BFS or DFS on graph (not fully implemented)
-        else if (choice == 3)
-        {
-            if (!loaded)
-            {
-                std::cout << "Please load data first.\n";
-                continue;
-            }
-            AdjacencyList new_graph;
-            buildGraphFromReviews(reviews, new_graph); 
-
-            std::cin.ignore();
-            std::cout << "Enter search type (BFS or DFS): ";
-            std::string search_type;
-            std::getline(std::cin, search_type);
-
-            std::cout << "Enter a keyword to search for:\n> ";
-            std::string keyword;
-            std::getline(std::cin, keyword);
-            std::transform(keyword.begin(), keyword.end(), keyword.begin(), ::tolower);
-
-            // find the first matching review in `reviews`
-            std::string start_review;
-            for (auto &r : reviews)
-            {
-                auto text = r.reviewText;
-                std::string lower = text;
-                std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-                if (lower.find(keyword) != std::string::npos)
-                {
-                    start_review = text;
-                    break;
-                }
-            }
-            if (start_review.empty())
-            {
-                std::cout << "No review found containing \"" << keyword << "\".\n";
-                continue;
+                ImGui::EndTabItem();
             }
 
-            std::cout << "Starting from review:\n\"" << start_review << "\"\n";
-            auto t0 = std::chrono::high_resolution_clock::now();
-
-            std::vector<std::string> output;
-            if (search_type == "BFS" || search_type == "bfs")
-                output = new_graph.BFS(start_review);
-            else if (search_type == "DFS" || search_type == "dfs")
-                output = new_graph.DFS(start_review);
-            else
-            {
-                std::cout << "Invalid search type.\n";
-                continue;
-            }
-
-            auto t1 = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0);
-
-            std::cout << "Search took " << duration.count() << " microseconds\n";
-            for (auto &node : output)
-            {
-                std::cout << "- " << node << "\n";
-            }
-        }
-
-        // 4) Display statistics of current filtered data
-        else if (choice == 4)
-        {
-            if (!loaded || filtered.empty())
-            {
-                std::cout << "No reviews to show.\n";
-            }
-            else
-            {
-                int totalScore = 0, totalVotes = 0, recommended = 0;
-                for (const auto &r : filtered)
-                {
-                    totalScore += r.score;
-                    totalVotes += r.votes;
-                    if (r.score == 1)
-                        ++recommended;
-                }
-
-                double avgScore = static_cast<double>(totalScore) / filtered.size();
-                double percentRecommended = 100.0 * recommended / filtered.size();
-
-                if (gameTitle != "N/A")
-                {
-                    std::cout << "Viewing stats for " << gameTitle << std::endl;
-                }
-                else
-                {
-                    std::cout << "Total Distribution Stats:\n";
-                }
-                std::cout << "- Total Reviews: " << filtered.size() << "\n"
-                          << "- Avg Score: " << avgScore << "\n"
-                          << "- % Recommended: " << percentRecommended << "%\n"
-                          << "- Helpful Votes: " << totalVotes << "\n";
-
-                if (gameTitle != "N/A")
-                {
-                    for (const auto &r : filtered)
-                    {
-                        std::cout << r.reviewText << std::endl;
+            // Search tab
+            if (ImGui::BeginTabItem("Search")) {
+                // Keyword input
+                ImGui::InputText("Keyword", keyword, IM_ARRAYSIZE(keyword));
+                // Search type  
+                ImGui::RadioButton("BFS",&searchType,0); ImGui::SameLine();
+                ImGui::RadioButton("DFS",&searchType,1);
+                // Run search button
+                if (ImGui::Button("Run")) {
+                    searched = true;
+                    std::string kw(keyword);
+                    std::transform(kw.begin(), kw.end(), kw.begin(), ::tolower);
+                    std::string start;
+                    // Find first review containing keyword
+                    for (auto& r : filtered) {
+                        std::string low = r.reviewText;
+                        std::transform(low.begin(), low.end(), low.begin(), ::tolower);
+                        if (low.find(kw)!=std::string::npos) {
+                            start = r.reviewText;
+                            break;
+                        }
+                    }
+                    resultNodes.clear();
+                    // Run BFS or DFS if found
+                    if (!start.empty()) {
+                        auto t0 = std::chrono::high_resolution_clock::now();
+                        resultNodes = (searchType==0)
+                            ? graph.BFS(start)
+                            : graph.DFS(start);
+                        auto t1 = std::chrono::high_resolution_clock::now();
+                        elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                                         t1 - t0).count();
+                    } else {
+                        elapsed_us = 0;
                     }
                 }
+                // Show elapsed time
+                float ms = elapsed_us * 0.001f;
+                ImGui::Text("Elapsed: %.2f ms", ms);
+                // Show message if no results
+                if (searched && resultNodes.empty()) {
+                    ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "No results found.");
+                }
+                ImGui::EndTabItem();
             }
+
+            // Results tab
+            if (ImGui::BeginTabItem("Results")) {
+                ImGui::Text("Visited: %zu nodes", resultNodes.size());
+                ImGui::Separator();
+                // List result nodes
+                for (auto& s : resultNodes)
+                    ImGui::BulletText("%s", s.c_str());
+                ImGui::EndTabItem();
+            }
+
+            // Graph tab
+            if (ImGui::BeginTabItem("Graph")) {
+
+                ImGui::Text("Graph View of Results");
+                ImGui::Separator();
+                // Show message if no graph
+                if (resultNodes.empty())
+                {
+                    ImGui::Text("No graph to display.");
+                }
+                else
+                {
+                    ImDrawList *draw_list = ImGui::GetWindowDrawList();
+                    ImVec2 origin = ImGui::GetCursorScreenPos();
+                    float x = origin.x + 50, y = origin.y + 50;
+                    float y_step = 60;
+
+                    // Draw nodes vertically as a tree-like view
+                    for (size_t i = 0; i < resultNodes.size(); ++i)
+                    {
+                        ImVec2 node_pos(x, y + i * y_step);
+                        // Draw node circle
+                        draw_list->AddCircleFilled(node_pos, 10, IM_COL32(100, 200, 250, 255));
+                        // Draw node label
+                        draw_list->AddText(ImVec2(node_pos.x + 15, node_pos.y - 7), IM_COL32_WHITE, resultNodes[i].c_str());
+
+                        // Draw edge to next node
+                        if (i + 1 < resultNodes.size())
+                        {
+                            ImVec2 next_pos(x, y + (i + 1) * y_step);
+                            draw_list->AddLine(node_pos, next_pos, IM_COL32(200, 200, 200, 255), 2.0f);
+                        }
+                    }
+                    // Add vertical space after graph
+                    ImGui::Dummy(ImVec2(0, resultNodes.size() * y_step + 20));
+                }
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
         }
 
-        // 5) Exit
-        else if (choice == 5)
-        {
-            std::cout << "Exiting program.\n";
-            break;
-        }
-
-        // Invalid input
-        else
-        {
-            std::cout << "Invalid option.\n";
-        }
+        ImGui::End();
+        ImGui::Render();
+        // Set viewport and clear screen
+        int w,h; glfwGetFramebufferSize(window,&w,&h);
+        glViewport(0,0,w,h);
+        glClearColor(0.1f,0.1f,0.1f,1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        glfwSwapBuffers(window);
     }
 
+    // Cleanup ImGui and GLFW
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+    glfwDestroyWindow(window);
+    glfwTerminate();
     return 0;
 }
