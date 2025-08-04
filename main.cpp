@@ -271,7 +271,7 @@ int main() {
                     } else if (scoreFilterIdx==2) {
                         filtered.erase(std::remove_if(
                             filtered.begin(), filtered.end(),
-                            [](auto& r){ return r.score!=0; }),
+                            [](auto& r){ return r.score!=-1; }),
                         filtered.end());
                     }
                     // Filter by minimum votes
