@@ -16,7 +16,6 @@
 #include "backends/imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
 
-// --- Data Model + CSV Loader + Graph Builder ---
 struct Steam_Properties {
     int appID;
     std::string name;
@@ -37,7 +36,7 @@ std::vector<Steam_Properties> loadReviews(
     }
 
     std::string line;
-    std::getline(file, line); // skip header
+    std::getline(file, line); 
     while (std::getline(file, line)) {
         std::stringstream ss(line);
         Steam_Properties r;
