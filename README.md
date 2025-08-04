@@ -45,20 +45,20 @@ git submodule update --init --recursive
 
 ### Windows (MinGW)
 
-Open a terminal in your project directory and run:
+Open a terminal in your project directory and run (all on one line):
 
 ```bash
-g++ main.cpp AdjacencyList.cpp ^
-    thirdparty/imgui/imgui.cpp ^
-    thirdparty/imgui/imgui_draw.cpp ^
-    thirdparty/imgui/imgui_widgets.cpp ^
-    thirdparty/imgui/imgui_tables.cpp ^
-    thirdparty/imgui/backends/imgui_impl_glfw.cpp ^
-    thirdparty/imgui/backends/imgui_impl_opengl3.cpp ^
-    -Ithirdparty/imgui ^
-    -Ithirdparty/imgui/backends ^
-    -std=c++17 -O2 ^
-    -lglfw3 -lopengl32 -lgdi32 ^
+g++ main.cpp AdjacencyList.cpp \
+    thirdparty/imgui/imgui.cpp \
+    thirdparty/imgui/imgui_draw.cpp \
+    thirdparty/imgui/imgui_widgets.cpp \
+    thirdparty/imgui/imgui_tables.cpp \
+    thirdparty/imgui/backends/imgui_impl_glfw.cpp \
+    thirdparty/imgui/backends/imgui_impl_opengl3.cpp \
+    -Ithirdparty/imgui \
+    -Ithirdparty/imgui/backends \
+    -std=c++17 -O2 \
+    -lglfw3 -lopengl32 -lgdi32 \
     -o steamviz.exe
 ```
 
@@ -67,6 +67,9 @@ Then launch the app:
 ```bash
 ./steamviz.exe
 ```
+
+> **Note:**  
+> For Windows Command Prompt, remove the backslashes and enter the command as a single line.
 
 ---
 
