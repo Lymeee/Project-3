@@ -148,6 +148,12 @@ int main() {
     long long elapsed_us = 0;
     static bool searched = false;
 
+    std::string lastSearchStart;
+
+ 
+    static long long bfs_us = 0, dfs_us = 0;
+    static size_t bfs_nodes = 0, dfs_nodes = 0;
+
     // Main loop
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -233,6 +239,7 @@ int main() {
                         std::transform(low.begin(), low.end(), low.begin(), ::tolower);
                         if (low.find(kw)!=std::string::npos) {
                             start = r.reviewText;
+                            lastSearchStart = start; 
                             break;
                         }
                     }
@@ -246,8 +253,24 @@ int main() {
                         auto t1 = std::chrono::high_resolution_clock::now();
                         elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
                                          t1 - t0).count();
+
+                        // Store BFS/DFS comparison results for the Comparison tab
+                        auto t_bfs0 = std::chrono::high_resolution_clock::now();
+                        auto bfsResult = graph.BFS(start);
+                        auto t_bfs1 = std::chrono::high_resolution_clock::now();
+                        bfs_us = std::chrono::duration_cast<std::chrono::microseconds>(t_bfs1 - t_bfs0).count();
+                        bfs_nodes = bfsResult.size();
+
+                        auto t_dfs0 = std::chrono::high_resolution_clock::now();
+                        auto dfsResult = graph.DFS(start);
+                        auto t_dfs1 = std::chrono::high_resolution_clock::now();
+                        dfs_us = std::chrono::duration_cast<std::chrono::microseconds>(t_dfs1 - t_dfs0).count();
+                        dfs_nodes = dfsResult.size();
+                        // -------------------------------------------------------------
                     } else {
                         elapsed_us = 0;
+                        bfs_us = dfs_us = 0;
+                        bfs_nodes = dfs_nodes = 0;
                     }
                 }
                 // Show elapsed time
@@ -270,42 +293,23 @@ int main() {
                 ImGui::EndTabItem();
             }
 
-            // Graph tab
-            if (ImGui::BeginTabItem("Graph")) {
-
-                ImGui::Text("Graph View of Results");
+            // Comparison tab
+            if (ImGui::BeginTabItem("Comparison")) {
+                ImGui::Text("BFS vs DFS Comparison");
                 ImGui::Separator();
-                // Show message if no graph
-                if (resultNodes.empty())
-                {
-                    ImGui::Text("No graph to display.");
-                }
-                else
-                {
-                    ImDrawList *draw_list = ImGui::GetWindowDrawList();
-                    ImVec2 origin = ImGui::GetCursorScreenPos();
-                    float x = origin.x + 50, y = origin.y + 50;
-                    float y_step = 60;
 
-                    // Draw nodes vertically as a tree-like view
-                    for (size_t i = 0; i < resultNodes.size(); ++i)
-                    {
-                        ImVec2 node_pos(x, y + i * y_step);
-                        // Draw node circle
-                        draw_list->AddCircleFilled(node_pos, 10, IM_COL32(100, 200, 250, 255));
-                        // Draw node label
-                        draw_list->AddText(ImVec2(node_pos.x + 15, node_pos.y - 7), IM_COL32_WHITE, resultNodes[i].c_str());
+                if (!lastSearchStart.empty() && bfs_nodes > 0 && dfs_nodes > 0) {
+                    ImGui::Text("BFS:  %.2f ms, %zu nodes visited", bfs_us * 0.001f, bfs_nodes);
+                    ImGui::Text("DFS:  %.2f ms, %zu nodes visited", dfs_us * 0.001f, dfs_nodes);
 
-                        // Draw edge to next node
-                        if (i + 1 < resultNodes.size())
-                        {
-                            ImVec2 next_pos(x, y + (i + 1) * y_step);
-                            draw_list->AddLine(node_pos, next_pos, IM_COL32(200, 200, 200, 255), 2.0f);
-                        }
-                    }
-                    // Add vertical space after graph
-                    ImGui::Dummy(ImVec2(0, resultNodes.size() * y_step + 20));
+                    float max_nodes = (float)std::max(bfs_nodes, dfs_nodes);
+                    ImGui::Text("Nodes Visited:");
+                    ImGui::ProgressBar(bfs_nodes / max_nodes, ImVec2(200, 20), "BFS");
+                    ImGui::ProgressBar(dfs_nodes / max_nodes, ImVec2(200, 20), "DFS");
+                } else {
+                    ImGui::Text("No data to compare. Run a search first.");
                 }
+
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
