@@ -24,6 +24,23 @@ Download here: [GitHub Release](https://github.com/Lymeee/Project-3/releases/tag
 - **Standard C++ STL** – Data structures and utilities  
 - **CSV Parsing** – Done manually with `std::stringstream`
 
+## Cloning the Repository
+
+This project uses Git submodules for third-party libraries.  
+To clone the repository with all dependencies, run:
+
+```bash
+git clone --recursive https://github.com/Lymeee/Project-3.git
+```
+
+If you already cloned without `--recursive`, run:
+
+```bash
+git submodule update --init --recursive
+```
+
+---
+
 ## How to Build
 
 ### Windows (MinGW)
